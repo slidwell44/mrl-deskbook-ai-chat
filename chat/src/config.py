@@ -13,9 +13,19 @@ class GeminiSettings(BaseSettings):
     )
 
 
+class OpenAiSettings(BaseSettings):
+    API_KEY: str
+
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        env_prefix="OPENAI_",
+        env_file=".env",
+    )
+
+
 @dataclass
 class Settings:
     gemini: GeminiSettings = field(default_factory=GeminiSettings)
+    openai: OpenAiSettings = field(default_factory=OpenAiSettings)
 
 
 settings = Settings()
