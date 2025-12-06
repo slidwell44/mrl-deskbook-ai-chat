@@ -10,6 +10,7 @@ class GeminiSettings(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="GEMINI_",
         env_file=".env",
+        extra="ignore",
     )
 
 
@@ -19,6 +20,7 @@ class OpenAiSettings(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="OPENAI_",
         env_file=".env",
+        extra="ignore",
     )
 
 
