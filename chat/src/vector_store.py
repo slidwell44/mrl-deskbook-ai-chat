@@ -1,77 +1,45 @@
-from typing import Any, Mapping
+from pathlib import Path
 
-import chromadb
-from chromadb.config import Settings
+from openai import OpenAI
+from openai.pagination import SyncCursorPage
+from openai.types import VectorStore
+from openai.types.vector_stores.vector_store_file_batch import VectorStoreFileBatch
+
+from config import settings
+
+client = OpenAI(api_key=settings.openai.API_KEY)
+
+vector_store_name = "MRL-Deskbook-AI-Chat-Store"
 
 
-class VectorStore:
-    def __init__(self, collection_name: str = "documents") -> None:
-        self.client = chromadb.PersistentClient(
-            path="chroma_db",
-            settings=Settings(allow_reset=True),
-        )
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
+def create_vector_store_with_pdf() -> str:
+    vector_stores: SyncCursorPage[VectorStore] = client.vector_stores.list()
 
-    def add_documents(
-        self,
-        texts: list[str],
-        embeddings: list[list[float]],
-        metadatas: list[
-            Mapping[str, chromadb.SparseVector | bool | float | int | str | None]
-        ],
-    ) -> None:
-        if not texts:
-            return
+    check: list[VectorStore] = [
+        vs for vs in vector_stores.data if vs.name == vector_store_name
+    ]
+    if check:
+        print("Vector store already exists:", check[0].name)
+        return check[0].id
 
-        if not (len(texts) == len(embeddings) == len(metadatas)):
-            raise ValueError(
-                f"Lengths must match: texts={len(texts)}, "
-                f"embeddings={len(embeddings)}, metadatas={len(metadatas)}"
-            )
+    vs: VectorStore = client.vector_stores.create(
+        name=vector_store_name,
+    )
 
-        ids: list[str] = [
-            f"{m['doc_id']}_{m['page']}_{m['chunk_index']}" for m in metadatas
-        ]
+    pdf_path: Path = (
+        Path(__file__).parent.parent.parent / "data" / "MRL_Deskbook_2025.pdf"
+    )
 
-        self.collection.add(
-            ids=ids,
-            # pyrefly: ignore [bad-argument-type]
-            embeddings=embeddings,
-            documents=texts,
-            metadatas=metadatas,
-        )
+    batch: VectorStoreFileBatch = client.vector_stores.file_batches.upload_and_poll(
+        vector_store_id=vs.id,
+        files=[open(pdf_path, "rb")],
+    )
 
-    def similarity_search(
-        self,
-        query_embedding: list[float],
-        k: int = 5,
-    ) -> list[dict[str, Any]]:
-        result: chromadb.QueryResult = self.collection.query(
-            # pyrefly: ignore [bad-argument-type]
-            query_embeddings=[query_embedding],
-            n_results=k,
-            include=["documents", "metadatas", "distances"],
-        )
+    print("Vector store:", vs.id)
+    print("Batch status:", batch.status)
+    print("File counts:", batch.file_counts)
+    return vs.id
 
-        docs: list[dict[str, Any]] = []
 
-        if not result["ids"]:
-            return docs
-
-        for i in range(len(result["ids"][0])):
-            docs.append(
-                {
-                    "id": result["ids"][0][i],
-                    "text": result["documents"][0][i] if result["documents"] else "",
-                    "metadata": result["metadatas"][0][i]
-                    if result["metadatas"]
-                    else {},
-                    "distance": result["distances"][0][i]
-                    if result.get("distances")
-                    else None,
-                }
-            )
-        return docs
+if __name__ == "__main__":
+    create_vector_store_with_pdf()
